@@ -10,7 +10,7 @@ function loadWeights() {
         try {
             return JSON.parse(fs.readFileSync(weightsFilePath, 'utf8'));
         } catch (e) {
-            console.error(error);
+            console.error(e);
         }
     }
     return {};
@@ -32,6 +32,7 @@ module.exports = {
             const BASE_WEIGHT = 1;
 
             const UNSEEN_WEIGHT = Math.max(5, Math.floor(totalFiles * 0.5));
+
             const weights = loadWeights();
             files.forEach(file => {
                 if (!(file in weights)) {
