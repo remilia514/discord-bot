@@ -1,3 +1,5 @@
 .env
 config.json
 quotes.json
+quotesWeights.json
+quoteImages
