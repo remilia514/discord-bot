@@ -6,11 +6,6 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "nodemonConfig": {
-    "ignore": [
-      "src/quoteWeights.json"
-    ]
-  },
   "keywords": [],
   "author": "",
   "license": "ISC",
