@@ -256,11 +256,12 @@ module.exports = {
                 await interaction.channel.send({
                     content: quote.length > 2000 ? `${quote.slice(0, 1997)}...` : quote,
                 });
-                notice = `已將複製文 #${selectedQuote + 1} 發送到此頻道`;
-                sent = true;
+
+                await interaction.deleteReply();
+                return;
             } catch (error) {
                 console.error('傳送失敗：', error);
-                notice = '發送失敗，請確認 bot 有在此頻道發送訊息的權限';
+                notice = '發送失敗 【機器人無法在dm中發送訊息】';
             }
 
             const windowIndex = Math.floor(page / PAGES_PER_WINDOW);
