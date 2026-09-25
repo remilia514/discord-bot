@@ -35,9 +35,6 @@ function getQuotes() {
     }
 }
 
-/**
- * 智慧將長文字按標點符號切分成符合 Discord 長度限制 (<= 2000) 的陣列
- */
 function splitTextSmartly(text, maxLength = 2000) {
     const chunks = [];
     let remaining = text;
@@ -48,23 +45,15 @@ function splitTextSmartly(text, maxLength = 2000) {
             break;
         }
 
-        // 先抓取最大上限範圍內的文字
         let chunk = remaining.slice(0, maxLength);
-        
-        // 尋找最後一個適合切斷的標點符號（全/半形逗號、句號、驚嘆號、問號、換行）
         const splitIndex = Math.max(
-            chunk.lastIndexOf('，'),
-            chunk.lastIndexOf(','),
-            chunk.lastIndexOf('。'),
-            chunk.lastIndexOf('.'),
-            chunk.lastIndexOf('！'),
-            chunk.lastIndexOf('!'),
-            chunk.lastIndexOf('？'),
-            chunk.lastIndexOf('?'),
+            chunk.lastIndexOf('，'), chunk.lastIndexOf(','),
+            chunk.lastIndexOf('。'), chunk.lastIndexOf('.'),
+            chunk.lastIndexOf('！'), chunk.lastIndexOf('!'),
+            chunk.lastIndexOf('？'), chunk.lastIndexOf('?'),
             chunk.lastIndexOf('\n')
         );
 
-        // 如果在後半段 (例如超過 1000 字) 找到標點符號，就從該處切斷；否則就硬切 2000 字
         if (splitIndex > maxLength / 2) {
             chunks.push(remaining.slice(0, splitIndex + 1));
             remaining = remaining.slice(splitIndex + 1);
@@ -73,7 +62,6 @@ function splitTextSmartly(text, maxLength = 2000) {
             remaining = remaining.slice(maxLength);
         }
     }
-
     return chunks;
 }
 
@@ -95,9 +83,9 @@ function makePageMenu(quotes, page, windowIndex, ownerId) {
     return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
             .setCustomId(`viewcopypasta:page:${windowIndex}:${ownerId}`)
-            .setPlaceholder('預覽')
+            .setPlaceholder('選擇頁數')
             .setDisabled(options.length === 0)
-            .addOptions(options.length ? options : [{ label: 'no content available', value: '0' }])
+            .addOptions(options.length ? options : [{ label: '無可用內容', value: '0' }])
     );
 }
 
@@ -119,9 +107,9 @@ function makeGroupMenu(quotes, page, group, ownerId) {
     return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
             .setCustomId(`viewcopypasta:group:${page}:${ownerId}`)
-            .setPlaceholder('預覽')
+            .setPlaceholder('選擇分組')
             .setDisabled(quotes.length === 0)
-            .addOptions(options.length ? options : [{ label: 'no content available', value: '0' }])
+            .addOptions(options.length ? options : [{ label: '無可用內容', value: '0' }])
     );
 }
 
@@ -142,80 +130,42 @@ function makeContentMenu(quotes, page, group, selectedQuote, ownerId) {
     return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
             .setCustomId(`viewcopypasta:content:${page}:${group ?? -1}:${ownerId}`)
-            .setPlaceholder('預覽')
+            .setPlaceholder('選擇複製文內容')
             .setDisabled(options.length === 0)
-            .addOptions(options.length ? options : [{ label: 'select a group before selecting content', value: '0' }])
+            .addOptions(options.length ? options : [{ label: '請先選擇分組', value: '0' }])
     );
 }
 
-function makeNavigationRow(page, totalPages, windowIndex, ownerId) {
-    const totalWindows = Math.max(1, Math.ceil(totalPages / PAGES_PER_WINDOW));
-    return new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId(`viewcopypasta:window:${windowIndex - 1}:${ownerId}`)
-            .setLabel('◀ previous')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(windowIndex <= 0),
-        new ButtonBuilder()
-            .setCustomId(`viewcopypasta:window:${windowIndex + 1}:${ownerId}`)
-            .setLabel('next ▶')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(windowIndex >= totalWindows - 1),
-    );
-}
-
-function makeSendRow(page, group, selectedQuote, ownerId, sent = false) {
+function makeSendRow(page, group, selectedQuote, ownerId) {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId(`viewcopypasta:send:${page}:${group ?? -1}:${selectedQuote ?? -1}:${ownerId}`)
-            .setLabel(sent ? '已發送' : '發送複製文')
+            .setLabel('發送複製文')
             .setStyle(ButtonStyle.Success)
-            .setDisabled(selectedQuote === null || sent)
+            .setDisabled(selectedQuote === null)
     );
 }
 
-function makeEmbed(quotes, page, group, selectedQuote, notice = '') {
-    const totalPages = Math.max(1, Math.ceil(quotes.length / ITEMS_PER_PAGE));
-    const first = quotes.length ? page * ITEMS_PER_PAGE + 1 : 0;
-    const last = Math.min((page + 1) * ITEMS_PER_PAGE, quotes.length);
+function makeEmbed(quotes, selectedQuote, notice = '') {
     const embed = new EmbedBuilder()
         .setColor(0x9b2335)
-        .setTitle('預覽')
-        .setDescription(
-            quotes.length
-                ? 'preview the selected copypasta using the menus below, then send it to the channel.'
-                : 'no content available'
-        )
-        .addFields(
-            { name: 'amount', value: `共 **${quotes.length.toLocaleString()}** 篇`, inline: true },
-            { name: 'range', value: quotes.length ? `**${first}–${last}**` : '—', inline: true },
-            { name: 'page', value: `**${page + 1} / ${totalPages}**`, inline: true },
-        );
-
-    if (group !== null) {
-        const groupFirst = page * ITEMS_PER_PAGE + group * ITEMS_PER_GROUP + 1;
-        const groupLast = Math.min(groupFirst + ITEMS_PER_GROUP - 1, last);
-        embed.addFields({ name: 'current', value: `**${groupFirst}–${groupLast}**`, inline: true });
-    }
+        .setTitle('複製文選單');
 
     if (selectedQuote !== null && quotes[selectedQuote] !== undefined) {
         const quote = quotes[selectedQuote];
-        // 預覽字數縮減至 300 字，並盡量切在標點符號處
         let previewText = quote;
-        if (quote.length > 300) {
-            const shortChunk = quote.slice(0, 300);
+        if (quote.length > 400) {
+            const shortChunk = quote.slice(0, 400);
             const splitIndex = Math.max(
-                shortChunk.lastIndexOf('，'),
-                shortChunk.lastIndexOf(','),
-                shortChunk.lastIndexOf('。'),
-                shortChunk.lastIndexOf('.'),
+                shortChunk.lastIndexOf('，'), shortChunk.lastIndexOf(','),
+                shortChunk.lastIndexOf('。'), shortChunk.lastIndexOf('.'),
                 shortChunk.lastIndexOf('\n')
             );
-            previewText = (splitIndex > 150 ? shortChunk.slice(0, splitIndex + 1) : shortChunk) + '...';
+            previewText = (splitIndex > 300 ? shortChunk.slice(0, splitIndex + 1) : shortChunk) + '...';
         }
 
         embed.addFields({
-            name: `selected #${selectedQuote + 1} (全字數: ${quote.length})`,
+            name: '當前預覽',
             value: previewText,
             inline: false,
         });
@@ -225,25 +175,20 @@ function makeEmbed(quotes, page, group, selectedQuote, notice = '') {
     return embed;
 }
 
-function makeComponents(quotes, page, group, selectedQuote, windowIndex, ownerId, sent = false) {
-    const totalPages = Math.max(1, Math.ceil(quotes.length / ITEMS_PER_PAGE));
-    const rows = [
+function makeComponents(quotes, page, group, selectedQuote, windowIndex, ownerId) {
+    return [
         makePageMenu(quotes, page, windowIndex, ownerId),
         makeGroupMenu(quotes, page, group, ownerId),
         makeContentMenu(quotes, page, group, selectedQuote, ownerId),
-        makeSendRow(page, group, selectedQuote, ownerId, sent),
+        makeSendRow(page, group, selectedQuote, ownerId),
     ];
-    if (totalPages > PAGES_PER_WINDOW) {
-        rows.push(makeNavigationRow(page, totalPages, windowIndex, ownerId));
-    }
-    return rows;
 }
 
-function render(interaction, quotes, page, group, selectedQuote, ownerId, notice = '', sent = false) {
+function render(interaction, quotes, page, group, selectedQuote, ownerId, notice = '') {
     const windowIndex = Math.floor(page / PAGES_PER_WINDOW);
     return interaction.update({
-        embeds: [makeEmbed(quotes, page, group, selectedQuote, notice)],
-        components: makeComponents(quotes, page, group, selectedQuote, windowIndex, ownerId, sent),
+        embeds: [makeEmbed(quotes, selectedQuote, notice)],
+        components: makeComponents(quotes, page, group, selectedQuote, windowIndex, ownerId),
     });
 }
 
@@ -255,13 +200,10 @@ module.exports = {
     callback: async (client, interaction) => {
         const quotes = getQuotes();
         const ownerId = interaction.user.id;
-        const page = 0;
-        const group = null;
-        const selectedQuote = null;
 
         await interaction.reply({
-            embeds: [makeEmbed(quotes, page, group, selectedQuote)],
-            components: makeComponents(quotes, page, group, selectedQuote, 0, ownerId),
+            embeds: [makeEmbed(quotes, null)],
+            components: makeComponents(quotes, 0, null, null, 0, ownerId),
             flags: [MessageFlags.Ephemeral],
         });
     },
@@ -273,7 +215,7 @@ module.exports = {
 
         if (interaction.user.id !== ownerId) {
             return interaction.reply({
-                content: '請使用自己的選單',
+                content: '此選單不屬於你',
                 flags: [MessageFlags.Ephemeral],
             });
         }
@@ -294,9 +236,6 @@ module.exports = {
             page = Number(parts[2]);
             group = Number(parts[3]);
             selectedQuote = Number(interaction.values[0]);
-        } else if (action === 'window') {
-            const windowIndex = Number(parts[2]);
-            page = windowIndex * PAGES_PER_WINDOW;
         } else if (action === 'send') {
             page = Number(parts[2]);
             group = Number(parts[3]);
@@ -307,44 +246,30 @@ module.exports = {
                 return render(interaction, quotes, 0, null, null, ownerId, '複製文不存在');
             }
 
-            await interaction.deferUpdate();
             try {
-                // 使用智慧切割，優雅地在逗號、句號處自動分段發送
-                const chunks = splitTextSmartly(quote, 2000);
-                for (const chunk of chunks) {
-                    await interaction.channel.send({ content: chunk });
-                }
+                await interaction.deferUpdate();
 
-                await interaction.deleteReply();
-                return;
+                const chunks = splitTextSmartly(quote, 2000);
+                    for (const chunk of chunks) {
+                        await interaction.channel.send({ content: chunk });
+                    }
+                    await interaction.deleteReply();
+                    return;
+                    
             } catch (error) {
                 console.error('傳送失敗：', error);
-                notice = '發送失敗 【機器人無法在 DM 中發送訊息或缺少發送權限】';
+                const reason = error.message ? error.message : '未知錯誤';
+                notice = `發送失敗：${reason}`;
             }
 
-            const windowIndex = Math.floor(page / PAGES_PER_WINDOW);
-            return interaction.editReply({
-                embeds: [makeEmbed(quotes, page, group, selectedQuote, notice)],
-                components: makeComponents(
-                    quotes,
-                    page,
-                    group,
-                    selectedQuote,
-                    windowIndex,
-                    ownerId,
-                    false
-                ),
-            });
+            return render(interaction, quotes, page, group, selectedQuote, ownerId, notice);
         } else {
             return;
         }
 
         page = Math.max(0, Math.min(page, totalPages - 1));
 
-        if (
-            group !== null &&
-            (!Number.isInteger(group) || group < 0 || group >= GROUPS_PER_PAGE)
-        ) {
+        if (group !== null && (!Number.isInteger(group) || group < 0 || group >= GROUPS_PER_PAGE)) {
             group = null;
         }
 
