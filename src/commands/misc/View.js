@@ -6,6 +6,7 @@ const {
     ButtonStyle,
     EmbedBuilder,
     StringSelectMenuBuilder,
+    MessageFlags,
 } = require('discord.js');
 
 const filePath = path.join(__dirname, '..', '..', 'quotes.json');
@@ -32,6 +33,48 @@ function getQuotes() {
         console.error('讀取失敗：', error);
         return [];
     }
+}
+
+/**
+ * 智慧將長文字按標點符號切分成符合 Discord 長度限制 (<= 2000) 的陣列
+ */
+function splitTextSmartly(text, maxLength = 2000) {
+    const chunks = [];
+    let remaining = text;
+
+    while (remaining.length > 0) {
+        if (remaining.length <= maxLength) {
+            chunks.push(remaining);
+            break;
+        }
+
+        // 先抓取最大上限範圍內的文字
+        let chunk = remaining.slice(0, maxLength);
+        
+        // 尋找最後一個適合切斷的標點符號（全/半形逗號、句號、驚嘆號、問號、換行）
+        const splitIndex = Math.max(
+            chunk.lastIndexOf('，'),
+            chunk.lastIndexOf(','),
+            chunk.lastIndexOf('。'),
+            chunk.lastIndexOf('.'),
+            chunk.lastIndexOf('！'),
+            chunk.lastIndexOf('!'),
+            chunk.lastIndexOf('？'),
+            chunk.lastIndexOf('?'),
+            chunk.lastIndexOf('\n')
+        );
+
+        // 如果在後半段 (例如超過 1000 字) 找到標點符號，就從該處切斷；否則就硬切 2000 字
+        if (splitIndex > maxLength / 2) {
+            chunks.push(remaining.slice(0, splitIndex + 1));
+            remaining = remaining.slice(splitIndex + 1);
+        } else {
+            chunks.push(chunk);
+            remaining = remaining.slice(maxLength);
+        }
+    }
+
+    return chunks;
 }
 
 function makePageMenu(quotes, page, windowIndex, ownerId) {
@@ -157,9 +200,23 @@ function makeEmbed(quotes, page, group, selectedQuote, notice = '') {
 
     if (selectedQuote !== null && quotes[selectedQuote] !== undefined) {
         const quote = quotes[selectedQuote];
+        // 預覽字數縮減至 300 字，並盡量切在標點符號處
+        let previewText = quote;
+        if (quote.length > 300) {
+            const shortChunk = quote.slice(0, 300);
+            const splitIndex = Math.max(
+                shortChunk.lastIndexOf('，'),
+                shortChunk.lastIndexOf(','),
+                shortChunk.lastIndexOf('。'),
+                shortChunk.lastIndexOf('.'),
+                shortChunk.lastIndexOf('\n')
+            );
+            previewText = (splitIndex > 150 ? shortChunk.slice(0, splitIndex + 1) : shortChunk) + '...';
+        }
+
         embed.addFields({
-            name: `selected #${selectedQuote + 1}`,
-            value: quote.length > 3900 ? `${quote.slice(0, 3897)}...` : quote,
+            name: `selected #${selectedQuote + 1} (全字數: ${quote.length})`,
+            value: previewText,
             inline: false,
         });
     }
@@ -205,7 +262,7 @@ module.exports = {
         await interaction.reply({
             embeds: [makeEmbed(quotes, page, group, selectedQuote)],
             components: makeComponents(quotes, page, group, selectedQuote, 0, ownerId),
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
         });
     },
 
@@ -217,7 +274,7 @@ module.exports = {
         if (interaction.user.id !== ownerId) {
             return interaction.reply({
                 content: '請使用自己的選單',
-                ephemeral: true,
+                flags: [MessageFlags.Ephemeral],
             });
         }
 
@@ -251,17 +308,18 @@ module.exports = {
             }
 
             await interaction.deferUpdate();
-            let sent = false;
             try {
-                await interaction.channel.send({
-                    content: quote.length > 2000 ? `${quote.slice(0, 1997)}...` : quote,
-                });
+                // 使用智慧切割，優雅地在逗號、句號處自動分段發送
+                const chunks = splitTextSmartly(quote, 2000);
+                for (const chunk of chunks) {
+                    await interaction.channel.send({ content: chunk });
+                }
 
                 await interaction.deleteReply();
                 return;
             } catch (error) {
                 console.error('傳送失敗：', error);
-                notice = '發送失敗 【機器人無法在dm中發送訊息】';
+                notice = '發送失敗 【機器人無法在 DM 中發送訊息或缺少發送權限】';
             }
 
             const windowIndex = Math.floor(page / PAGES_PER_WINDOW);
@@ -274,7 +332,7 @@ module.exports = {
                     selectedQuote,
                     windowIndex,
                     ownerId,
-                    sent
+                    false
                 ),
             });
         } else {
