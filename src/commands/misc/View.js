@@ -1,15 +1,30 @@
 const fs = require('fs');
 const path = require('path');
+
 const filePath = path.join(__dirname, '..', '..', 'quotes.json');
+const GROUP_SIZE = 25;
+
+let cachedQuotes = [];
+let cachedMtimeMs = -1;
 
 function getQuotes() {
     try {
-        if (!fs.existsSync(filePath)) return [];
-        const data = fs.readFileSync(filePath, 'utf8');
-        const quotes = JSON.parse(data);
-        return Array.isArray(quotes) ? quotes : [];
+        const stat = fs.statSync(filePath);
+
+        if (stat.mtimeMs !== cachedMtimeMs) {
+            const data = fs.readFileSync(filePath, 'utf8');
+            const parsed = JSON.parse(data);
+
+            cachedQuotes = Array.isArray(parsed)
+                ? parsed.filter(quote => typeof quote === 'string')
+                : [];
+
+            cachedMtimeMs = stat.mtimeMs;
+        }
+
+        return cachedQuotes;
     } catch (error) {
-        console.error(error);
+        console.error('讀取 quotes.json 失敗：', error);
         return [];
     }
 }
@@ -20,15 +35,15 @@ module.exports = {
     options: [
         {
             name: 'group',
-            description: '如果要更改分類請重新輸入指令',
-            type: 3, 
+            description: '選擇範圍',
+            type: 3,
             required: true,
             autocomplete: true,
         },
         {
             name: 'content',
-            description: '如果要更改分類請重新輸入指令',
-            type: 3, 
+            description: '選擇內容',
+            type: 3,
             required: true,
             autocomplete: true,
         },
@@ -36,121 +51,97 @@ module.exports = {
 
     autocomplete: async (client, interaction) => {
         try {
-            const focusedOption = interaction.options.getFocused(true);
-            const focusedValue = focusedOption.value.trim().toLowerCase();
-            const allQuotes = getQuotes();
-            const totalQuotes = allQuotes.length;
-            const groupSize = 25;
+            const focused = interaction.options.getFocused(true);
+            const input = String(focused.value ?? '').trim().toLowerCase();
+            const quotes = getQuotes();
 
-            if (focusedOption.name === 'group') {
-                const totalGroups = Math.ceil(totalQuotes / groupSize);
-                let choices = [];
+            if (focused.name === 'group') {
+                const groups = [];
 
-                for (let i = 0; i < totalGroups; i++) {
-                    const start = i * groupSize + 1;
-                    const end = Math.min((i + 1) * groupSize, totalQuotes);
-                    choices.push({
-                        name: `${start} ~ ${end}`,
-                        value: `${start}-${end}` // 將區間範圍存進 value，方便給 content 讀取
+                for (let start = 0; start < quotes.length; start += GROUP_SIZE) {
+                    const end = Math.min(start + GROUP_SIZE, quotes.length);
+
+                    groups.push({
+                        name: `${start + 1} ~ ${end}`,
+                        value: `${start}:${end}`,
                     });
                 }
 
-                // 如果使用者有輸入關鍵字，篩選分組名稱
-                if (focusedValue) {
-                    choices = choices.filter(c => c.name.toLowerCase().includes(focusedValue));
-                }
-
-                return await interaction.respond(choices.slice(0, 25));
-            }
-
-            if (focusedOption.name === 'content') {
-                const groupValue = interaction.options.getString('group') || '';
-                
-                const mappedQuotes = allQuotes.map((quote, index) => ({
-                    text: quote,
-                    id: (index + 1).toString(),
-                    index: index.toString()
-                }));
-
-                let targetQuotes = mappedQuotes;
-
-                if (groupValue && groupValue.includes('-')) {
-                    const [startStr, endStr] = groupValue.split('-');
-                    const start = parseInt(startStr, 10);
-                    const end = parseInt(endStr, 10);
-
-                    targetQuotes = mappedQuotes.filter(item => {
-                        const itemNum = parseInt(item.id, 10);
-                        return itemNum >= start && itemNum <= end;
-                    });
-                }
-
-                if (focusedValue) {
-                    targetQuotes = targetQuotes.filter(item => 
-                        item.text.toLowerCase().includes(focusedValue) || item.id.includes(focusedValue)
-                    );
-                }
-
-                const choices = targetQuotes.slice(0, 25).map(item => ({
-                    name: `${item.text}`.substring(0, 100),
-                    value: item.index // 保持傳遞原始的陣列 index
-                }));
+                const choices = groups
+                    .filter(group =>
+                        !input ||
+                        group.name.toLowerCase().includes(input) ||
+                        group.value.includes(input)
+                    )
+                    .slice(0, 25);
 
                 return await interaction.respond(choices);
             }
 
+            if (focused.name === 'content') {
+                const groupValue = interaction.options.getString('group') ?? '';
+                const match = /^(\d+):(\d+)$/.exec(groupValue);
+
+                if (!match) {
+                    return await interaction.respond([]);
+                }
+
+                const start = Number(match[1]);
+                const end = Number(match[2]);
+
+                const choices = [];
+
+                for (let index = start; index < Math.min(end, quotes.length); index++) {
+                    const quote = quotes[index];
+                    const number = index + 1;
+
+                    if (
+                        input &&
+                        !quote.toLowerCase().includes(input) &&
+                        !String(number).includes(input)
+                    ) {
+                        continue;
+                    }
+
+                    choices.push({
+                        name: `${number}. ${quote}`.slice(0, 100),
+                        value: String(index),
+                    });
+
+                    if (choices.length === 25) break;
+                }
+
+                return await interaction.respond(choices);
+            }
+
+            return await interaction.respond([]);
         } catch (error) {
-            console.error(error);
+            console.error('處理 autocomplete 失敗：', error);
+
+            if (!interaction.responded) {
+                await interaction.respond([]).catch(() => {});
+            }
         }
     },
 
     callback: async (client, interaction) => {
-            try {
-                const userInput = interaction.options.getString('content').trim();
-                const allQuotes = getQuotes();
-                
+        const quotes = getQuotes();
+        const index = Number(interaction.options.getString('content'));
 
-                let actualQuote = null;
-                let quoteIndex = null;
-
-                if (/^\d+$/.test(userInput)) {
-                    const num = parseInt(userInput, 10);
-                    
-                    if (num >= 0 && num < allQuotes.length) {
-                        actualQuote = allQuotes[num];
-                        quoteIndex = num + 1;
-                    } else {
-                        const indexFromId = num - 1;
-                        if (indexFromId >= 0 && indexFromId < allQuotes.length) {
-                            actualQuote = allQuotes[indexFromId];
-                            quoteIndex = num;
-                        }
-                    }
-                }
-
-                if (!actualQuote) {
-                    const cleanStr = (str) => str.toLowerCase().replace(/[^\w\s\u4e00-\u9fa5]/g, '');
-                    
-                    const cleanInput = cleanStr(userInput);
-                    const foundIndex = allQuotes.findIndex(q => cleanStr(q).includes(cleanInput));
-                    
-                    if (foundIndex !== -1) {
-                        actualQuote = allQuotes[foundIndex];
-                        quoteIndex = foundIndex + 1;
-                    }
-                }
-
-                let replyContent = `${actualQuote}`;
-
-                if (replyContent.length > 2000) {
-                    replyContent = replyContent.substring(0, 1995) + '...';
-                }
-                
-                await interaction.reply({
-                    content: replyContent,
-                });
-        } catch (error) {
-            console.error(error);
+        if (!Number.isInteger(index) || index < 0 || index >= quotes.length) {
+            return interaction.reply({
+                content: '找不到這篇複製文，請重新選擇分類和內容。',
+                ephemeral: true,
+            });
         }
+
+        const quote = quotes[index];
+
+        const replyContent =
+            quote.length > 2000
+                ? `${quote.slice(0, 1997)}...`
+                : quote;
+
+        return interaction.reply({ content: replyContent });
     },
 };
