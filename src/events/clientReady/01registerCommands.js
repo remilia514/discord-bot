@@ -6,12 +6,12 @@ const getLocalCommands = require('../../utils/getLocalCommands');
 module.exports = async (client) => {
     try {
         const localCommands = getLocalCommands();
-        const applicationCommands = getApplicationCommands(client, testServer);
+        const applicationCommands = await getApplicationCommands(client, testServer);
 
         for (const localCommand of localCommands) {
             const { name, description, options } = localCommand;
 
-            const existingCommand = await applicationCommands?.cache?.find(
+            const existingCommand = applicationCommands?.cache?.find(
                 (cmd) => cmd.name === name
             );
 
@@ -35,7 +35,7 @@ module.exports = async (client) => {
                     continue;
                 }
 
-                await client.application.commands.create({
+                await applicationCommands.create({
                     name,
                     description,
                     options,

@@ -250,12 +250,12 @@ module.exports = {
                 await interaction.deferUpdate();
 
                 const chunks = splitTextSmartly(quote, 2000);
-                    for (const chunk of chunks) {
-                        await interaction.channel.send({ content: chunk });
-                    }
-                    await interaction.deleteReply();
-                    return;
-                    
+                for (const chunk of chunks) {
+                    await interaction.channel.send({ content: chunk });
+                }
+                await interaction.deleteReply();
+                return;
+
             } catch (error) {
                 console.error('傳送失敗：', error);
                 const reason = error.message ? error.message : '未知錯誤';
