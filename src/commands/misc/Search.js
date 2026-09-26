@@ -71,8 +71,9 @@ function splitTextSmartly(text, maxLength = 2000) {
 
 async function sendQuote(interaction, quote) {
     const chunks = splitTextSmartly(quote, 2000);
-    for (const chunk of chunks) {
-        await interaction.channel.send({ content: chunk });
+    await interaction.reply({ content: chunks[0] });
+    for (let i = 1; i < chunks.length; i++) {
+        await interaction.channel.send({ content: chunks[i] });
     }
 }
 
