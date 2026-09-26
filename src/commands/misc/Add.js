@@ -16,8 +16,12 @@ module.exports = {
     ],
 
     callback: async (client, interaction) => {
-        const content = interaction.options.getString('content');
+        let content = interaction.options.getString('content');
         let quotesArray = [];
+
+        if (content.length > 2000) {
+            content = content.slice(0, 1997) + '...';
+        }
 
         try {
             if (fs.existsSync(filePath)) {
@@ -34,7 +38,13 @@ module.exports = {
 
             quotesArray.push(content);
             fs.writeFileSync(filePath, JSON.stringify(quotesArray, null, 2), 'utf8');
-            await interaction.reply(`已新增 **${content}**`);
+
+            let replyText = `已新增 **${content}**`;
+            if (replyText.length > 2000) {
+                replyText = replyText.slice(0, 1997) + '...';
+            }
+
+            await interaction.reply(replyText);
 
         } catch (error) {
             console.error(error);
