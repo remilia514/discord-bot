@@ -20,7 +20,7 @@ module.exports = {
         let quotesArray = [];
 
         if (content.length > 2000) {
-            content = content.slice(0, 1997) + '...';
+            content = content.slice(0, 1990) + '...';
         }
 
         try {
@@ -41,7 +41,7 @@ module.exports = {
 
             let replyText = `已新增 **${content}**`;
             if (replyText.length > 2000) {
-                replyText = replyText.slice(0, 1997) + '...';
+                replyText = replyText.slice(0, 1990) + '...';
             }
 
             await interaction.reply(replyText);
