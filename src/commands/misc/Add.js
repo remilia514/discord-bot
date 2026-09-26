@@ -34,7 +34,7 @@ module.exports = {
 
             quotesArray.push(content);
             fs.writeFileSync(filePath, JSON.stringify(quotesArray, null, 2), 'utf8');
-            let sendContent = content.length > 500 ? content.substring(0, 500) + '...' : content;
+            let sendContent = content.length > 1500 ? content.substring(0, 1500) + '...' : content;
             await interaction.reply(`已新增 **${sendContent}**`);
 
         } catch (error) {
